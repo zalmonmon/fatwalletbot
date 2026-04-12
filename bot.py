@@ -1,16 +1,17 @@
+import os
+import re
+from datetime import datetime
+
 from openai import OpenAI
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
-import re
 
 # =========================
 # CONFIG
 # =========================
-client_ai = import os
 client_ai = OpenAI(api_key=os.getenv("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"))
 
 scope = [
@@ -24,7 +25,9 @@ creds = ServiceAccountCredentials.from_json_keyfile_name(
 )
 
 client = gspread.authorize(creds)
-sheet = client.open("Our fatfat wallets").worksheet("Raw_Data")
+
+# ✅ make sure this matches your sheet tab EXACTLY
+sheet = client.open("Our fatfat wallets").worksheet("raw_data")
 
 # =========================
 # PAYMENT METHODS
@@ -46,80 +49,62 @@ PAYMENT_METHODS = [
 def get_category(text):
     text_lower = text.lower()
 
-    # =========================
-    # 🥗 DINING
-    # =========================
+    # 🍜 DINING (STRONG)
     dining_keywords = [
-        "food", "eat", "meal", "restaurant", "cafe",
-        "coffee", "tea", "bubble tea", "boba",
-        "rice", "noodle", "ramen", "sushi",
-        "burger", "pizza", "chicken", "mala",
-        "hotpot", "hawker", "breakfast", "lunch",
-        "dinner", "salad", "bento", "sandwich",
-        "bakery", "dessert", "ice cream"
+        "food","eat","meal","restaurant","cafe",
+        "coffee","tea","boba","bubble tea",
+        "rice","noodle","ramen","sushi",
+        "burger","pizza","chicken","mala","hotpot",
+        "breakfast","lunch","dinner",
+        "salad","sandwich","bento",
+        "dessert","ice cream","cake"
     ]
-
     if any(w in text_lower for w in dining_keywords):
         return "Dining"
 
-    # =========================
     # 🥦 GROCERIES
-    # =========================
     grocery_keywords = [
-        "groceries", "grocery", "supermarket",
-        "ntuc", "fairprice", "sheng siong", "giant",
-        "cold storage"
+        "groceries","grocery","supermarket",
+        "ntuc","fairprice","sheng siong","giant",
+        "cold storage","wet market",
+        "milk","eggs","bread","vegetable","fruit",
+        "tofu","yogurt","meat","fish","snacks","rice"
     ]
-
     if any(w in text_lower for w in grocery_keywords):
         return "Groceries"
 
-    # =========================
-    # 🛍️ SHOPPING (FIXED + SHOPEE SUPPORT)
-    # =========================
+    # 🛍️ SHOPPING (FIXED)
     shopping_keywords = [
-        "shopee", "lazada", "amazon",
-        "online order", "purchase", "cart",
-        "shop", "checkout",
-
-        "zara", "uniqlo", "h&m",
-        "clothes", "shirt", "pants", "dress",
-        "shoes", "bag", "handbag",
-
-        "skincare", "makeup", "perfume",
-        "electronics", "phone", "gadget"
+        "shopee","lazada","amazon",
+        "online","checkout","cart","order",
+        "zara","uniqlo","h&m",
+        "clothes","shirt","pants","dress",
+        "shoes","bag",
+        "skincare","makeup","perfume",
+        "electronics","phone","gadget"
     ]
-
     if any(w in text_lower for w in shopping_keywords):
         return "Shopping"
 
-    # =========================
     # ✈️ TRAVEL
-    # =========================
     if any(w in text_lower for w in [
-        "flight", "air ticket", "hotel", "airbnb",
-        "stay", "booking", "agoda", "trip.com", "trip"
+        "flight","air ticket","hotel","airbnb",
+        "booking","trip","stay"
     ]):
         return "Travel"
 
-    # =========================
     # 🚕 TRANSPORT
-    # =========================
-    if any(w in text_lower for w in ["grab", "mrt", "bus", "taxi"]):
+    if any(w in text_lower for w in ["grab","mrt","bus","taxi"]):
         return "Transport"
 
-    # =========================
     # 🎮 ENTERTAINMENT
-    # =========================
     if any(w in text_lower for w in [
-        "netflix", "spotify", "movie", "cinema", "shinee",
-        "concert", "ktv", "theme park", "game"
+        "netflix","spotify","movie","cinema",
+        "concert","ktv","game"
     ]):
         return "Entertainment"
 
-    # =========================
-    # 🧠 AI FALLBACK
-    # =========================
+    # 🤖 AI FALLBACK
     try:
         response = client_ai.chat.completions.create(
             model="gpt-4.1-mini",
@@ -130,12 +115,13 @@ def get_category(text):
 Classify into:
 Dining, Groceries, Shopping, Transport, Travel, Entertainment, Bills, Others.
 
-Rules:
-- food = Dining
-- supermarket = Groceries
-- shopee/lazada = Shopping
-- flight/hotel = Travel
-- grab/mrt = Transport
+Food = Dining
+Supermarket = Groceries
+Shopee/Lazada = Shopping
+Flights/Hotels = Travel
+Grab/MRT = Transport
+
+Return only category name.
 """
                 },
                 {"role": "user", "content": text}
@@ -145,15 +131,8 @@ Rules:
 
         category = response.choices[0].message.content.strip()
 
-        # =========================
-        # 🛡️ SAFETY OVERRIDE
-        # =========================
-        food_signals = [
-            "ramen","sushi","rice","noodle","mala","hotpot",
-            "coffee","tea","cafe","food","eat","salad","bento"
-        ]
-
-        if category == "Others" and any(w in text_lower for w in food_signals):
+        # safety override
+        if category == "Others" and any(w in text_lower for w in ["food","eat","coffee","ramen","salad"]):
             return "Dining"
 
         return category
@@ -162,7 +141,7 @@ Rules:
         return "Others"
 
 # =========================
-# HANDLER
+# MESSAGE HANDLER
 # =========================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -170,45 +149,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user.first_name
 
     try:
-        # AMOUNT
+        # 💰 amount
         match = re.search(r"(\d+(\.\d+)?)", text)
         if not match:
-            raise ValueError("No amount found")
+            raise ValueError("No amount")
 
         amount = float(match.group())
 
-        # SPLIT
+        # 👥 split
         is_shared = "shared" in text_lower or "split" in text_lower
         split_flag = "yes" if is_shared else "no"
         user_field = "shared" if is_shared else user
 
-        # PAYMENT
+        # 💳 payment
         payment = "cash"
         for m in PAYMENT_METHODS:
             if m in text_lower:
                 payment = m
                 break
 
-        # CLEAN NAME
-        clean_text = text_lower
-        clean_text = re.sub(r"(\d+(\.\d+)?)", "", clean_text)
+        # 🧹 clean name
+        clean_text = re.sub(r"(\d+(\.\d+)?)", "", text_lower)
 
         for m in PAYMENT_METHODS:
             clean_text = clean_text.replace(m, "")
 
-        clean_text = clean_text.replace("shared", "")
-        clean_text = clean_text.replace("split", "")
+        clean_text = clean_text.replace("shared", "").replace("split", "")
 
         name = clean_text.strip()
 
-        # CATEGORY
+        # 📂 category
         category = get_category(name)
 
-        print("TEXT:", text)
-        print("NAME:", name)
-        print("CATEGORY:", category)
+        print("DEBUG:", name, category)
 
-        # SAVE TO SHEET
+        # 📊 save to sheet
         sheet.append_row([
             datetime.now().strftime("%Y-%m-%d"),
             user_field,
@@ -220,13 +195,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
 
         await update.message.reply_text(
-            f"✅ Added: {name}\n💰 ${amount}\n📂 {category}\n💳 {payment}\n🔁 Split: {split_flag}"
+            f"✅ {name}\n💰 ${amount}\n📂 {category}\n💳 {payment}\n🔁 {split_flag}"
         )
 
     except Exception as e:
         print("ERROR:", e)
         await update.message.reply_text(
-            "❌ Format: coffee 5 cash / shopee dress 20 / ramen 12 split"
+            "❌ Format: coffee 5 cash / ramen 12 split / shopee 20"
         )
 
 # =========================
@@ -234,15 +209,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     records = sheet.get_all_records()
-
     total = sum(float(r["Amount"]) for r in records)
 
     await update.message.reply_text(f"📊 Total Spend: ${total:.2f}")
 
 # =========================
-# RUN BOT
+# RUN BOT (FIXED)
 # =========================
-app = ApplicationBuilder()..token(os.getenv("AAGWYwoTGXCESRtncIUQw9XQiiaS6NAFoZQ)).build()
+app = ApplicationBuilder().token(os.getenv("8635228440:AAH7wonBDto1uyDA9B9XEq8aEf-nYxUdatc")).build()
 
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 app.add_handler(CommandHandler("summary", summary))

@@ -43,8 +43,12 @@ with open("credentials.json", "r") as f:
 print("GOOGLE CLIENT EMAIL:", data.get("client_email"))
 print("GOOGLE PRIVATE KEY ID:", data.get("private_key_id"))
 print("GOOGLE TYPE:", data.get("type"))
-creds = ServiceAccountCredentials.from_json_keyfile_name(
-    "credentials.json",
+import json
+
+creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    creds_dict,
     scope,
 )
 client = gspread.authorize(creds)

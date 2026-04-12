@@ -35,7 +35,14 @@ scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
 ]
+import json
 
+with open("credentials.json", "r") as f:
+    data = json.load(f)
+
+print("GOOGLE CLIENT EMAIL:", data.get("client_email"))
+print("GOOGLE PRIVATE KEY ID:", data.get("private_key_id"))
+print("GOOGLE TYPE:", data.get("type"))
 creds = ServiceAccountCredentials.from_json_keyfile_name(
     "credentials.json",
     scope,

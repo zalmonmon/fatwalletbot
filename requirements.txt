@@ -1,4 +1,4 @@
-python-telegram-bot==20.7
-openai
-gspread
-oauth2client
+python-telegram-bot==22.7
+gspread==6.1.4
+oauth2client==4.1.3
+openai>=1.0.0

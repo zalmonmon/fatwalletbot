@@ -1,5 +1,6 @@
 import os
 import re
+import json
 from datetime import datetime
 
 import gspread
@@ -19,9 +20,13 @@ from telegram.ext import (
 # =========================
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
 
 if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("Missing TELEGRAM_BOT_TOKEN environment variable")
+    raise ValueError("Missing TELEGRAM_BOT_TOKEN")
+
+if not GOOGLE_CREDENTIALS:
+    raise ValueError("Missing GOOGLE_CREDENTIALS")
 
 client_ai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
@@ -35,22 +40,9 @@ scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
 ]
-import json
 
-with open("credentials.json", "r") as f:
-    data = json.load(f)
-
-print("GOOGLE CLIENT EMAIL:", data.get("client_email"))
-print("GOOGLE PRIVATE KEY ID:", data.get("private_key_id"))
-print("GOOGLE TYPE:", data.get("type"))
-import json
-
-creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
-
-creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    creds_dict,
-    scope,
-)
+creds_dict = json.loads(GOOGLE_CREDENTIALS)
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(WORKSHEET_NAME)
 
@@ -74,100 +66,26 @@ PAYMENT_METHODS = [
 def get_category(text: str) -> str:
     text_lower = text.lower().strip()
 
-    dining_keywords = [
-        "food", "eat", "meal", "restaurant", "cafe", "kopi",
-        "coffee", "tea", "bubble tea", "boba", "juice",
-        "rice", "noodle", "ramen", "sushi", "burger", "pizza",
-        "chicken rice", "mala", "hotpot", "steamboat", "kbbq",
-        "hawker", "breakfast", "lunch", "dinner", "brunch",
-        "salad", "sandwich", "bento", "bakery", "dessert",
-        "ice cream", "cake", "toast", "yakun", "luckin", "chagee",
-        "stuff'd", "caifan", "nasi lemak", "nasi padang", "ytf",
-    ]
-    if any(word in text_lower for word in dining_keywords):
+    if any(word in text_lower for word in ["food","eat","restaurant","cafe","coffee","boba","ramen","sushi","dinner","lunch","brunch"]):
         return "Dining"
 
-    grocery_keywords = [
-        "groceries", "grocery", "supermarket", "ntuc", "fairprice",
-        "sheng siong", "giant", "cold storage", "wet market",
-        "market", "bread", "milk", "eggs", "vegetable", "vegetables",
-        "fruit", "fruits", "tofu", "yogurt", "yoghurt", "fish",
-        "beef", "pork", "snacks", "oil", "sauce", "seasoning",
-    ]
-    if any(word in text_lower for word in grocery_keywords):
+    if any(word in text_lower for word in ["ntuc","fairprice","sheng siong","giant","grocery","milk","eggs","vegetable","fruit"]):
         return "Groceries"
 
-    shopping_keywords = [
-        "shopee", "lazada", "amazon", "cart", "checkout", "order",
-        "online order", "purchase", "zara", "uniqlo", "h&m",
-        "clothes", "shirt", "pants", "dress", "shoes", "bag",
-        "handbag", "skincare", "makeup", "perfume", "electronics",
-        "phone", "gadget", "accessories",
-    ]
-    if any(word in text_lower for word in shopping_keywords):
+    if any(word in text_lower for word in ["shopee","lazada","amazon","zara","uniqlo","clothes","skincare","makeup"]):
         return "Shopping"
 
-    travel_keywords = [
-        "flight", "air ticket", "hotel", "airbnb", "stay",
-        "accommodation", "booking", "trip", "travel insurance",
-        "airport transfer",
-    ]
-    if any(word in text_lower for word in travel_keywords):
+    if any(word in text_lower for word in ["flight","hotel","airbnb","trip"]):
         return "Travel"
 
-    transport_keywords = [
-        "grab", "mrt", "bus", "taxi", "gojek", "train", "lrt",
-        "parking", "erp", "petrol",
-    ]
-    if any(word in text_lower for word in transport_keywords):
+    if any(word in text_lower for word in ["grab","mrt","bus","taxi","erp","petrol"]):
         return "Transport"
 
-    entertainment_keywords = [
-        "netflix", "spotify", "movie", "cinema", "concert", "ktv",
-        "karaoke", "game", "steam", "playstation", "arcade",
-        "bowling", "theme park",
-    ]
-    if any(word in text_lower for word in entertainment_keywords):
+    if any(word in text_lower for word in ["netflix","spotify","movie","concert"]):
         return "Entertainment"
 
-    bills_keywords = [
-        "electricity", "water bill", "internet", "wifi", "broadband",
-        "phone bill", "telco", "insurance", "rent", "tax", "utilities",
-        "subscription",
-    ]
-    if any(word in text_lower for word in bills_keywords):
+    if any(word in text_lower for word in ["bill","rent","insurance","wifi","telco"]):
         return "Bills"
-
-    # AI fallback only if key exists
-    if client_ai:
-        try:
-            response = client_ai.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "Classify this expense into exactly one category: "
-                            "Dining, Groceries, Shopping, Transport, Travel, "
-                            "Entertainment, Bills, Others. "
-                            "Return only the category name."
-                        ),
-                    },
-                    {"role": "user", "content": text},
-                ],
-                max_tokens=10,
-            )
-            category = response.choices[0].message.content.strip()
-
-            allowed = {
-                "Dining", "Groceries", "Shopping", "Transport",
-                "Travel", "Entertainment", "Bills", "Others"
-            }
-            if category in allowed:
-                return category
-
-        except Exception as e:
-            print("AI category fallback error:", e)
 
     return "Others"
 
@@ -220,18 +138,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name = clean_name(text_lower)
         category = get_category(name)
 
-        print(
-            {
-                "text": text,
-                "name": name,
-                "category": category,
-                "amount": amount,
-                "payment": payment,
-                "split": split_flag,
-                "user": user_field,
-            }
-        )
-
         sheet.append_row([
             datetime.now().strftime("%Y-%m-%d"),
             user_field,
@@ -254,11 +160,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("handle_message error:", e)
         await update.message.reply_text(
             "❌ Could not parse.\n"
-            "Examples:\n"
-            "coffee 5 uob lady\n"
-            "ramen 12 cash\n"
-            "shopee order 20 maybank\n"
-            "dinner 50 grab split"
+            "Example: coffee 5 uob lady"
         )
 
 # =========================

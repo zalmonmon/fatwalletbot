@@ -66,25 +66,25 @@ PAYMENT_METHODS = [
 def get_category(text: str) -> str:
     text_lower = text.lower().strip()
 
-    if any(word in text_lower for word in ["food","eat","restaurant","cafe","coffee","boba","ramen","sushi","dinner","lunch","brunch"]):
+    if any(word in text_lower for word in ["food","eat","restaurant","cafe","coffee","boba","ramen","sushi","dinner","lunch","mala","nasi","rice","soup","grains","stuffd","porridge","brunch"]):
         return "Dining"
 
-    if any(word in text_lower for word in ["ntuc","fairprice","sheng siong","giant","grocery","milk","eggs","vegetable","fruit"]):
+    if any(word in text_lower for word in ["ntuc","fairprice","sheng siong","giant","grocery","milk","eggs","vegetable","cold storage","fruit"]):
         return "Groceries"
 
-    if any(word in text_lower for word in ["shopee","lazada","amazon","zara","uniqlo","clothes","skincare","makeup"]):
+    if any(word in text_lower for word in ["shopee","lazada","amazon","zara","uniqlo","clothes","skincare","lovet","SSD","makeup"]):
         return "Shopping"
 
-    if any(word in text_lower for word in ["flight","hotel","airbnb","trip"]):
+    if any(word in text_lower for word in ["flight","hotel","airbnb","trip","trip.com","traveloka","agoda"]):
         return "Travel"
 
     if any(word in text_lower for word in ["grab","mrt","bus","taxi","erp","petrol"]):
         return "Transport"
 
-    if any(word in text_lower for word in ["netflix","spotify","movie","concert"]):
+    if any(word in text_lower for word in ["netflix","spotify","movie","concert","maple","youtube","shinee"]):
         return "Entertainment"
 
-    if any(word in text_lower for word in ["bill","rent","insurance","wifi","telco"]):
+    if any(word in text_lower for word in ["bill","rent","insurance","wifi","telco","gomo","giga","tax"]):
         return "Bills"
 
     return "Others"

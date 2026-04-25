@@ -66,30 +66,102 @@ PAYMENT_METHODS = [
 def get_category(text: str) -> str:
     text_lower = text.lower().strip()
 
-    if any(word in text_lower for word in ["food","eat","restaurant","cafe","coffee","boba","ramen","sushi","dinner","lunch","mala","nasi","rice","soup","grains","stuffd","porridge","brunch"]):
-        return "Dining"
+    hard_rules = {
+        "Dining": [
+            "food","eat","restaurant","cafe","kopitiam","kopi","kopi o",
+            "teh","teh o","jolibee","mcd","coffee","boba","ramen","sushi",
+            "dinner","lunch","mala","xxhn","ijooz","onigiri","dabba",
+            "nasi","rice","soup","grains","stuffd","porridge","brunch",
+            "caifan","cai fan","yakun","ya kun","luckin","chagee",
+            "liho","gong cha","koi","playmade","grabfood","foodpanda"
+        ],
 
-    if any(word in text_lower for word in ["ntuc","fairprice","sheng siong","giant","grocery","milk","eggs","vegetable","cold storage","fruit"]):
-        return "Groceries"
+        "Groceries": [
+            "ntuc","fairprice","sheng siong","giant","grocery",
+            "milk","eggs","vegetable","cold storage","fruit",
+            "donki","redmart","market","wet market","supermarket"
+        ],
 
-    if any(word in text_lower for word in ["shopee","lazada","amazon","zara","uniqlo","clothes","skincare","lovet","SSD","makeup"]):
-        return "Shopping"
+        "Shopping": [
+            "shopee","lazada","amazon","zara","uniqlo","clothes",
+            "skincare","rosebeauty","lovet","ssd","makeup",
+            "taobao","shein","watsons","guardian","sephora",
+            "ikea","muji","miniso","decathlon"
+        ],
 
-    if any(word in text_lower for word in ["flight","hotel","airbnb","trip","trip.com","traveloka","agoda"]):
-        return "Travel"
+        "Travel": [
+            "flight","hotel","airbnb","trip","trip.com","traveloka",
+            "agoda","klook","airport","holiday","luggage"
+        ],
 
-    if any(word in text_lower for word in ["grab","mrt","bus","taxi","erp","petrol"]):
-        return "Transport"
+        "Transport": [
+            "grab","mrt","bus","taxi","erp","petrol",
+            "gojek","tada","parking","ezlink","simplygo"
+        ],
 
-    if any(word in text_lower for word in ["netflix","spotify","movie","concert","maple","youtube","shinee"]):
-        return "Entertainment"
+        "Entertainment": [
+            "netflix","spotify","movie","concert","maple",
+            "youtube","shinee","cinema","steam","game"
+        ],
 
-    if any(word in text_lower for word in ["bill","rent","insurance","wifi","telco","gomo","giga","tax"]):
-        return "Bills"
+        "Bills": [
+            "bill","rent","insurance","wifi","telco",
+            "gomo","giga","tax","utilities","sp bill",
+            "electricity","water","subscription"
+        ],
+    }
 
-    return "Others"
+    # Hard rules first
+    for category, keywords in hard_rules.items():
+        if any(word in text_lower for word in keywords):
+            return category
 
-# =========================
+    # Smart AI fallback
+    if client_ai:
+        try:
+            response = client_ai.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """
+You classify Singapore personal expenses.
+
+Return exactly ONE category:
+Dining, Groceries, Shopping, Transport, Travel, Entertainment, Bills, Others.
+
+Rules:
+- Hawker food / drinks / restaurants / cafes = Dining
+- Supermarket / ingredients / home food = Groceries
+- Shopee / Lazada / retail / beauty / clothes = Shopping
+- Grab / MRT / petrol / parking = Transport
+- Flight / hotel / overseas trip = Travel
+- Netflix / cinema / games / concerts = Entertainment
+- Utilities / rent / telco / insurance = Bills
+
+Return only category name.
+"""
+                    },
+                    {"role": "user", "content": text}
+                ],
+                max_tokens=10,
+                temperature=0
+            )
+
+            category = response.choices[0].message.content.strip()
+
+            allowed = {
+                "Dining","Groceries","Shopping","Transport",
+                "Travel","Entertainment","Bills","Others"
+            }
+
+            if category in allowed:
+                return category
+
+        except Exception as e:
+            print("AI category error:", e)
+
+    return "Others"# =========================
 # HELPERS
 # =========================
 def extract_amount(text: str) -> float:

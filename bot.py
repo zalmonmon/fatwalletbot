@@ -6,15 +6,15 @@ from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from openai import OpenAI
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    CallbackQueryHandler,
     filters,
 )
-
 # =========================
 # CONFIG
 # =========================
@@ -190,7 +190,19 @@ def clean_name(text_lower: str) -> str:
     if not cleaned:
         raise ValueError("Expense name is empty")
     return cleaned
+    
+CATEGORIES = [
+    "Dining",
+    "Groceries",
+    "Shopping",
+    "Transport",
+    "Travel",
+    "Entertainment",
+    "Bills",
+    "Others",
+]
 
+pending_expenses = {}
 # =========================
 # MESSAGE HANDLER
 # =========================
@@ -201,6 +213,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     text_lower = text.lower()
     user = update.message.from_user.first_name or "Unknown"
+    chat_id = update.message.chat_id
 
     try:
         amount = extract_amount(text)
@@ -209,32 +222,77 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_field = "shared" if is_shared else user
         payment = detect_payment(text_lower)
         name = clean_name(text_lower)
-        category = get_category(name)
 
-        sheet.append_row([
-            datetime.now().strftime("%Y-%m-%d"),
-            user_field,
-            name,
-            category,
-            amount,
-            payment,
-            split_flag,
-        ])
+        pending_expenses[chat_id] = {
+            "user_field": user_field,
+            "name": name,
+            "amount": amount,
+            "payment": payment,
+            "split_flag": split_flag,
+        }
+
+        keyboard = [
+            [
+                InlineKeyboardButton("Dining", callback_data="cat:Dining"),
+                InlineKeyboardButton("Groceries", callback_data="cat:Groceries"),
+            ],
+            [
+                InlineKeyboardButton("Shopping", callback_data="cat:Shopping"),
+                InlineKeyboardButton("Transport", callback_data="cat:Transport"),
+            ],
+            [
+                InlineKeyboardButton("Travel", callback_data="cat:Travel"),
+                InlineKeyboardButton("Entertainment", callback_data="cat:Entertainment"),
+            ],
+            [
+                InlineKeyboardButton("Bills", callback_data="cat:Bills"),
+                InlineKeyboardButton("Others", callback_data="cat:Others"),
+            ],
+        ]
 
         await update.message.reply_text(
-            f"✅ Added: {name}\n"
-            f"💰 ${amount:.2f}\n"
-            f"📂 {category}\n"
-            f"💳 {payment}\n"
-            f"🔁 Split: {split_flag}"
+            f"Select category for: {name}\n💰 ${amount:.2f}",
+            reply_markup=InlineKeyboardMarkup(keyboard),
         )
 
     except Exception as e:
         print("handle_message error:", e)
         await update.message.reply_text(
-            "❌ Could not parse.\n"
-            "Example: coffee 5 uob lady"
+            "❌ Could not parse.\nExample: coffee 5 uob lady"
         )
+
+async def category_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    chat_id = query.message.chat_id
+    category = query.data.replace("cat:", "")
+
+    expense = pending_expenses.get(chat_id)
+
+    if not expense:
+        await query.edit_message_text("❌ No pending expense found. Please key in again.")
+        return
+
+    sheet.append_row([
+        datetime.now().strftime("%Y-%m-%d"),
+        expense["user_field"],
+        expense["name"],
+        category,
+        expense["amount"],
+        expense["payment"],
+        expense["split_flag"],
+    ])
+
+    await query.edit_message_text(
+        f"✅ Added: {expense['name']}\n"
+        f"💰 ${expense['amount']:.2f}\n"
+        f"📂 {category}\n"
+        f"💳 {expense['payment']}\n"
+        f"🔁 Split: {expense['split_flag']}"
+    )
+
+    del pending_expenses[chat_id]
 
 # =========================
 # SUMMARY
@@ -255,5 +313,5 @@ app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
 app.add_handler(CommandHandler("summary", summary))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
+app.add_handler(CallbackQueryHandler(category_button))
 app.run_polling()

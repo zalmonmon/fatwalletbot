@@ -79,7 +79,7 @@ def get_category(text: str) -> str:
 
         "Groceries": [
             "ntuc","fairprice","sheng siong","giant","grocery",
-            "milk","eggs","vegetable","cold storage","fruit",
+            "milk","eggs","vegetable","cold storage","fruit","flour",
             "donki","redmart","market","wet market","supermarket"
         ],
 
@@ -222,7 +222,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_field = "shared" if is_shared else user
         payment = detect_payment(text_lower)
         name = clean_name(text_lower)
+category = get_category(name)
 
+if category != "Others":
+    sheet.append_row([
+        datetime.now().strftime("%Y-%m-%d"),
+        user_field,
+        name,
+        category,
+        amount,
+        payment,
+        split_flag,
+    ])
+
+    await update.message.reply_text(
+        f"✅ Added: {name}\n"
+        f"💰 ${amount:.2f}\n"
+        f"📂 {category}\n"
+        f"💳 {payment}\n"
+        f"🔁 Split: {split_flag}"
+    )
+    return
         pending_expenses[chat_id] = {
             "user_field": user_field,
             "name": name,

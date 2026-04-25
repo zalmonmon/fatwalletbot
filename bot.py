@@ -19,6 +19,7 @@ from telegram.ext import (
 # CONFIG
 # =========================
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+print("AI ENABLED:", bool(OPENAI_API_KEY))
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
 
@@ -159,7 +160,7 @@ Return only category name.
                 return category
 
         except Exception as e:
-            print("AI category error:", e)
+            print("AI category fallback error:", e)
 
     return "Others"# =========================
 # HELPERS

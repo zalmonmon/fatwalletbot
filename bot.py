@@ -162,8 +162,8 @@ Return only category name.
         except Exception as e:
             print("AI category fallback error:", e)
 
-    return "Others"# 
-=========================
+    return "Others"
+# =========================
 # HELPERS
 # =========================
 def extract_amount(text: str) -> float:

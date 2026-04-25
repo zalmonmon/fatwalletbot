@@ -74,7 +74,7 @@ def get_category(text: str) -> str:
             "dinner","lunch","mala","xxhn","ijooz","onigiri","dabba",
             "nasi","rice","soup","grains","stuffd","porridge","brunch",
             "caifan","cai fan","yakun","ya kun","luckin","chagee",
-            "liho","gong cha","koi","playmade","grabfood","foodpanda"
+            "liho","gong cha","koi","playmade","grabfood","foodpanda","matcha",
         ],
 
         "Groceries": [
@@ -101,7 +101,7 @@ def get_category(text: str) -> str:
         ],
 
         "Entertainment": [
-            "netflix","spotify","movie","concert","maple",
+            "netflix","spotify","movie","concert","maple","maplestory"
             "youtube","shinee","cinema","steam","game"
         ],
 
@@ -163,7 +163,7 @@ Return only category name.
             print("AI category fallback error:", e)
 
     return "Others"# 
-    =========================
+=========================
 # HELPERS
 # =========================
 def extract_amount(text: str) -> float:

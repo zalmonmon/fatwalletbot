@@ -263,7 +263,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print("handle_message error:", e)
-        await update.message.reply_text("❌ Could not parse. Example: coffee 5 uob lady")
+        await update.message.reply_text("❌ Wrong entry. Example: coffee 5 uob lady")
 
 async def category_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query

@@ -15,11 +15,17 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
+
+# NEW IMPORTS (FOR RENDER FIX)
+from flask import Flask
+import threading
+
 # =========================
 # CONFIG
 # =========================
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 print("AI ENABLED:", bool(OPENAI_API_KEY))
+
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
 
@@ -101,7 +107,7 @@ def get_category(text: str) -> str:
         ],
 
         "Entertainment": [
-            "netflix","spotify","movie","concert","maple","maplestory"
+            "netflix","spotify","movie","concert","maple","maplestory",
             "youtube","shinee","cinema","steam","game"
         ],
 
@@ -112,12 +118,10 @@ def get_category(text: str) -> str:
         ],
     }
 
-    # Hard rules first
     for category, keywords in hard_rules.items():
         if any(word in text_lower for word in keywords):
             return category
 
-    # Smart AI fallback
     if client_ai:
         try:
             response = client_ai.chat.completions.create(
@@ -130,17 +134,6 @@ You classify Singapore personal expenses.
 
 Return exactly ONE category:
 Dining, Groceries, Shopping, Transport, Travel, Entertainment, Bills, Others.
-
-Rules:
-- Hawker food / drinks / restaurants / cafes = Dining
-- Supermarket / ingredients / home food = Groceries
-- Shopee / Lazada / retail / beauty / clothes = Shopping
-- Grab / MRT / petrol / parking = Transport
-- Flight / hotel / overseas trip = Travel
-- Netflix / cinema / games / concerts = Entertainment
-- Utilities / rent / telco / insurance = Bills
-
-Return only category name.
 """
                     },
                     {"role": "user", "content": text}
@@ -163,6 +156,7 @@ Return only category name.
             print("AI category fallback error:", e)
 
     return "Others"
+
 # =========================
 # HELPERS
 # =========================
@@ -191,19 +185,9 @@ def clean_name(text_lower: str) -> str:
     if not cleaned:
         raise ValueError("Expense name is empty")
     return cleaned
-    
-CATEGORIES = [
-    "Dining",
-    "Groceries",
-    "Shopping",
-    "Transport",
-    "Travel",
-    "Entertainment",
-    "Bills",
-    "Others",
-]
 
 pending_expenses = {}
+
 # =========================
 # MESSAGE HANDLER
 # =========================
@@ -279,9 +263,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print("handle_message error:", e)
-        await update.message.reply_text(
-            "❌ Could not parse.\nExample: coffee 5 uob lady"
-        )
+        await update.message.reply_text("❌ Could not parse. Example: coffee 5 uob lady")
 
 async def category_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -293,7 +275,7 @@ async def category_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     expense = pending_expenses.get(chat_id)
 
     if not expense:
-        await query.edit_message_text("❌ No pending expense found. Please key in again.")
+        await query.edit_message_text("❌ No pending expense found.")
         return
 
     sheet.append_row([
@@ -316,9 +298,6 @@ async def category_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     del pending_expenses[chat_id]
 
-# =========================
-# SUMMARY
-# =========================
 async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         records = sheet.get_all_records()
@@ -329,11 +308,29 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Could not generate summary.")
 
 # =========================
-# RUN BOT
+# TELEGRAM APP
 # =========================
-app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+telegram_app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-app.add_handler(CommandHandler("summary", summary))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-app.add_handler(CallbackQueryHandler(category_button))
-app.run_polling()
+telegram_app.add_handler(CommandHandler("summary", summary))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+telegram_app.add_handler(CallbackQueryHandler(category_button))
+
+def run_bot():
+    telegram_app.run_polling()
+
+# =========================
+# FLASK SERVER (RENDER FIX)
+# =========================
+web_app = Flask(__name__)
+
+@web_app.route("/")
+def home():
+    return "Bot is running"
+
+# =========================
+# RUN BOTH
+# =========================
+if __name__ == "__main__":
+    threading.Thread(target=run_bot).start()
+    web_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))

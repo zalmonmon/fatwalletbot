@@ -16,18 +16,26 @@ from telegram.ext import (
     filters,
 )
 
-# NEW IMPORTS (FOR RENDER FIX)
+# =========================
+# NEW: FLASK FOR RENDER
+# =========================
 from flask import Flask
 import threading
+
+web_app = Flask(__name__)
+
+@web_app.route("/")
+def home():
+    return "Bot is running"
 
 # =========================
 # CONFIG
 # =========================
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-print("AI ENABLED:", bool(OPENAI_API_KEY))
-
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
+
+print("AI ENABLED:", bool(OPENAI_API_KEY))
 
 if not TELEGRAM_BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN")
@@ -57,14 +65,8 @@ sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(WORKSHEET_NAME)
 # PAYMENT METHODS
 # =========================
 PAYMENT_METHODS = [
-    "cash",
-    "paylah",
-    "shopback",
-    "uob lady",
-    "citi",
-    "maybank",
-    "uob ppv",
-    "dbs women",
+    "cash", "paylah", "shopback", "uob lady", "citi",
+    "maybank", "uob ppv", "dbs women",
 ]
 
 # =========================
@@ -74,86 +76,18 @@ def get_category(text: str) -> str:
     text_lower = text.lower().strip()
 
     hard_rules = {
-        "Dining": [
-            "food","eat","restaurant","cafe","kopitiam","kopi","kopi o",
-            "teh","teh o","jolibee","mcd","coffee","boba","ramen","sushi",
-            "dinner","lunch","mala","xxhn","ijooz","onigiri","dabba",
-            "nasi","rice","soup","grains","stuffd","porridge","brunch",
-            "caifan","cai fan","yakun","ya kun","luckin","chagee",
-            "liho","gong cha","koi","playmade","grabfood","foodpanda","matcha",
-        ],
-
-        "Groceries": [
-            "ntuc","fairprice","sheng siong","giant","grocery",
-            "milk","eggs","vegetable","cold storage","fruit","flour",
-            "donki","redmart","market","wet market","supermarket"
-        ],
-
-        "Shopping": [
-            "shopee","lazada","amazon","zara","uniqlo","clothes",
-            "skincare","rosebeauty","lovet","ssd","makeup",
-            "taobao","shein","watsons","guardian","sephora",
-            "ikea","muji","miniso","decathlon"
-        ],
-
-        "Travel": [
-            "flight","hotel","airbnb","trip","trip.com","traveloka",
-            "agoda","klook","airport","holiday","luggage"
-        ],
-
-        "Transport": [
-            "grab","mrt","bus","taxi","erp","petrol",
-            "gojek","tada","parking","ezlink","simplygo"
-        ],
-
-        "Entertainment": [
-            "netflix","spotify","movie","concert","maple","maplestory",
-            "youtube","shinee","cinema","steam","game"
-        ],
-
-        "Bills": [
-            "bill","rent","insurance","wifi","telco",
-            "gomo","giga","tax","utilities","sp bill",
-            "electricity","water","subscription"
-        ],
+        "Dining": ["food","eat","restaurant","cafe","kopitiam","coffee","mcd","ramen","sushi"],
+        "Groceries": ["ntuc","fairprice","sheng siong","giant","grocery","milk","eggs"],
+        "Shopping": ["shopee","lazada","amazon","zara","uniqlo","clothes","makeup","sephora"],
+        "Travel": ["flight","hotel","airbnb","trip","agoda","klook","airport"],
+        "Transport": ["grab","mrt","bus","taxi","petrol","parking"],
+        "Entertainment": ["netflix","spotify","movie","game","cinema","youtube"],
+        "Bills": ["bill","rent","wifi","telco","insurance","utilities"],
     }
 
     for category, keywords in hard_rules.items():
-        if any(word in text_lower for word in keywords):
+        if any(k in text_lower for k in keywords):
             return category
-
-    if client_ai:
-        try:
-            response = client_ai.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """
-You classify Singapore personal expenses.
-
-Return exactly ONE category:
-Dining, Groceries, Shopping, Transport, Travel, Entertainment, Bills, Others.
-"""
-                    },
-                    {"role": "user", "content": text}
-                ],
-                max_tokens=10,
-                temperature=0
-            )
-
-            category = response.choices[0].message.content.strip()
-
-            allowed = {
-                "Dining","Groceries","Shopping","Transport",
-                "Travel","Entertainment","Bills","Others"
-            }
-
-            if category in allowed:
-                return category
-
-        except Exception as e:
-            print("AI category fallback error:", e)
 
     return "Others"
 
@@ -178,33 +112,27 @@ def clean_name(text_lower: str) -> str:
     for method in PAYMENT_METHODS:
         cleaned = cleaned.replace(method, "")
 
-    cleaned = cleaned.replace("shared", "")
-    cleaned = cleaned.replace("split", "")
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
     if not cleaned:
-        raise ValueError("Expense name is empty")
+        raise ValueError("Expense name empty")
+
     return cleaned
 
 pending_expenses = {}
 
 # =========================
-# MESSAGE HANDLER
+# TELEGRAM HANDLERS
 # =========================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
-
-    text = update.message.text.strip()
+    text = update.message.text
     text_lower = text.lower()
+
     user = update.message.from_user.first_name or "Unknown"
     chat_id = update.message.chat_id
 
     try:
         amount = extract_amount(text)
-        is_shared = ("shared" in text_lower) or ("split" in text_lower)
-        split_flag = "yes" if is_shared else "no"
-        user_field = "shared" if is_shared else user
         payment = detect_payment(text_lower)
         name = clean_name(text_lower)
         category = get_category(name)
@@ -212,107 +140,81 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if category != "Others":
             sheet.append_row([
                 datetime.now().strftime("%Y-%m-%d"),
-                user_field,
+                user,
                 name,
                 category,
                 amount,
                 payment,
-                split_flag,
             ])
 
-            await update.message.reply_text(
-                f"✅ Added: {name}\n"
-                f"💰 ${amount:.2f}\n"
-                f"📂 {category}\n"
-                f"💳 {payment}\n"
-                f"🔁 Split: {split_flag}"
-            )
+            await update.message.reply_text(f"✅ Added {name} (${amount}) - {category}")
             return
 
         pending_expenses[chat_id] = {
-            "user_field": user_field,
+            "user": user,
             "name": name,
             "amount": amount,
             "payment": payment,
-            "split_flag": split_flag,
         }
 
         keyboard = [
             [
-                InlineKeyboardButton("Dining", callback_data="cat:Dining"),
-                InlineKeyboardButton("Groceries", callback_data="cat:Groceries"),
+                InlineKeyboardButton("Dining", callback_data="Dining"),
+                InlineKeyboardButton("Groceries", callback_data="Groceries"),
             ],
             [
-                InlineKeyboardButton("Shopping", callback_data="cat:Shopping"),
-                InlineKeyboardButton("Transport", callback_data="cat:Transport"),
+                InlineKeyboardButton("Shopping", callback_data="Shopping"),
+                InlineKeyboardButton("Transport", callback_data="Transport"),
             ],
             [
-                InlineKeyboardButton("Travel", callback_data="cat:Travel"),
-                InlineKeyboardButton("Entertainment", callback_data="cat:Entertainment"),
+                InlineKeyboardButton("Travel", callback_data="Travel"),
+                InlineKeyboardButton("Entertainment", callback_data="Entertainment"),
             ],
             [
-                InlineKeyboardButton("Bills", callback_data="cat:Bills"),
-                InlineKeyboardButton("Others", callback_data="cat:Others"),
+                InlineKeyboardButton("Bills", callback_data="Bills"),
+                InlineKeyboardButton("Others", callback_data="Others"),
             ],
         ]
 
         await update.message.reply_text(
-            f"Select category for: {name}\n💰 ${amount:.2f}",
+            f"Select category for {name} (${amount})",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
 
     except Exception as e:
-        print("handle_message error:", e)
-        await update.message.reply_text("❌ Wrong entry. Example: coffee 5 uob lady")
+        print(e)
+        await update.message.reply_text("❌ Could not parse expense")
 
 async def category_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     chat_id = query.message.chat_id
-    category = query.data.replace("cat:", "")
+    category = query.data
 
     expense = pending_expenses.get(chat_id)
 
     if not expense:
-        await query.edit_message_text("❌ No pending expense found.")
+        await query.edit_message_text("❌ No pending expense")
         return
 
     sheet.append_row([
         datetime.now().strftime("%Y-%m-%d"),
-        expense["user_field"],
+        expense["user"],
         expense["name"],
         category,
         expense["amount"],
         expense["payment"],
-        expense["split_flag"],
     ])
 
-    await query.edit_message_text(
-        f"✅ Added: {expense['name']}\n"
-        f"💰 ${expense['amount']:.2f}\n"
-        f"📂 {category}\n"
-        f"💳 {expense['payment']}\n"
-        f"🔁 Split: {expense['split_flag']}"
-    )
-
+    await query.edit_message_text(f"✅ Added {expense['name']} - {category}")
     del pending_expenses[chat_id]
 
-async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        records = sheet.get_all_records()
-        total = sum(float(row.get("Amount", 0) or 0) for row in records)
-        await update.message.reply_text(f"📊 Total Spend: ${total:.2f}")
-    except Exception as e:
-        print("summary error:", e)
-        await update.message.reply_text("❌ Could not generate summary.")
-
 # =========================
-# TELEGRAM APP
+# BOT SETUP
 # =========================
 telegram_app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-telegram_app.add_handler(CommandHandler("summary", summary))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 telegram_app.add_handler(CallbackQueryHandler(category_button))
 
@@ -320,19 +222,12 @@ def run_bot():
     telegram_app.run_polling()
 
 # =========================
-# FLASK SERVER (RENDER FIX)
+# START EVERYTHING (FIXED FOR RENDER)
 # =========================
-web_app = Flask(__name__)
+if __name__ == "__main__":
+    threading.Thread(target=run_bot, daemon=True).start()
 
-@web_app.route("/")
-def home():
-    return "Bot is running"
-
-# =========================
-# RUN BOTH
-# =========================
-import threading
-
-threading.Thread(target=run_bot, daemon=True).start()
-
-web_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    web_app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000))
+    )
